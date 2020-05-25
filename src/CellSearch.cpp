@@ -110,6 +110,8 @@ void print_usage() {
   cout << "      frequency where cell search should start" << endl;
   cout << "    -e --freq-end fe" << endl;
   cout << "      frequency where cell search should end" << endl;
+  cout << "    -f --freq-list var1,var2,..." << endl;
+  cout << "      list of frequency for search" << endl;
   cout << "    -n --num-try nt" << endl;
   cout << "      number of tries at each frequency/file (default: 1)" << endl;
   cout << "    -m --num-reserve N" << endl;
@@ -149,6 +151,19 @@ void print_usage() {
   cout << "calculated." << endl;
 }
 
+// parse param freq-list
+void string_to_array_double (std::string s, std::vector< double > *vd) {
+    std::size_t pos = 0;
+    double d = 0.0;
+    // convert ',' to ' '
+    while (pos < s.size ())
+        if ((pos = s.find_first_of (',',pos)) != std::string::npos)
+            s[pos] = ' ';
+    std::stringstream ss(s);
+    while (ss >> d)
+        vd->push_back (d);
+}
+
 // Parse the command line arguments and return optional parameters as
 // variables.
 // Also performs some basic sanity checks on the parameters.
@@ -159,6 +174,7 @@ void parse_commandline(
   // Outputs
   double & freq_start,
   double & freq_end,
+  std::vector< double > *vd_freq,
   uint16 & num_try,
   bool & sampling_carrier_twist,
   double & ppm,
@@ -203,6 +219,7 @@ void parse_commandline(
       {"brief",        no_argument,       0, 'b'},
       {"freq-start",   required_argument, 0, 's'},
       {"freq-end",     required_argument, 0, 'e'},
+      {"freq-list",    required_argument, 0, 'f'},
       {"num-try",      required_argument, 0, 'n'},
       {"twisted",      no_argument,       0, 't'},
       {"ppm",          required_argument, 0, 'p'},
@@ -263,6 +280,11 @@ void parse_commandline(
           ABORT(-1);
         }
         break;
+      case 'f': //list_freq
+        {
+          string_to_array_double(optarg, vd_freq);
+        }
+        break;	
       case 'n':
         num_try=strtol(optarg,&endp,10);
         if ((optarg==endp)||(*endp!='\0')) {
@@ -901,6 +923,7 @@ int main(
   // Command line parameters are stored here.
   double freq_start;
   double freq_end;
+  std::vector< double > vd_freq;
   uint16 num_try;
   bool sampling_carrier_twist;
   double ppm;
@@ -920,7 +943,11 @@ int main(
   uint16 num_loop; // it is not so useful
 
   // Get search parameters from user
-  parse_commandline(argc,argv,freq_start,freq_end,num_try,sampling_carrier_twist,ppm,correction,save_cap,use_recorded_data,data_dir,device_index, record_bin_filename, load_bin_filename,opencl_platform,opencl_device,filter_workitem,xcorr_workitem,num_reserve,num_loop,gain);
+  parse_commandline(argc,argv,freq_start,freq_end,,&vd_freq,num_try,sampling_carrier_twist,ppm,correction,save_cap,use_recorded_data,data_dir,device_index, record_bin_filename, load_bin_filename,opencl_platform,opencl_device,filter_workitem,xcorr_workitem,num_reserve,num_loop,gain);
+
+  if (vd_freq.size() > 0) {
+        freq_start = vd_freq[0];
+  }
 
   // Open the USB device (if necessary).
   dev_type_t::dev_type_t dev_use = dev_type_t::UNKNOWN;
@@ -1027,7 +1054,13 @@ int main(
   vec fc_search_set;
   double freq_correction = 0;
   if (freq_start!=9999e6) { // if frequency scanning range is specified
-    fc_search_set=itpp_ext::matlab_range(freq_start,100e3,freq_end);
+    if(vd_freq.size()==0) {
+      fc_search_set=itpp_ext::matlab_range(freq_start,100e3,freq_end);
+    } else {
+        fc_search_set.set_length(vd_freq.size());
+        for (uint i=0; i<vd_freq.size(); i++)
+          fc_search_set[i] = vd_freq[i];
+    }
   } else { // if frequency scanning range is not specified. a file is as input
     if (strlen(load_bin_filename)!=0 || use_recorded_data) { // use captured file
 
